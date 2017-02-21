@@ -1,0 +1,12 @@
+set term png size 1920,1080 enhanced font 'Verdana,24'
+set output "fluidX.png"
+set grid
+plot "fluidX.txt" matrix with image
+set term png size 1920,1080 enhanced font 'Verdana,24'
+set output "fluidY.png"
+set grid
+plot "fluidY.txt" matrix with image
+set term png size 1920,1080 enhanced font 'Verdana,24'
+set output "fluidZ.png"
+set grid
+plot "fluidZ.txt" matrix with image
