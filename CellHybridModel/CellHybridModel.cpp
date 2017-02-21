@@ -1069,6 +1069,10 @@ int main( int argc , char** argv ) {
 	{
 		// внесение клеток в модель
 		//placeCellInRandomPlace( CD4p( ) );
+
+		/*
+			Разработка агентной модели миграции и взаимодействия клеточных популяций и ВИЧ в замкнутой области лимфатического узла
+		*/
 	}
 	gtc_start( );
 	double timeInfo = omp_get_wtime( ) , fullTime = 0;
@@ -1254,18 +1258,6 @@ int main( int argc , char** argv ) {
 			foutZ << endl;
 		}
 		foutZ.close( );
-		/*double integral = 0. , a_integral = 0.;
-		for ( long j = 0; j < MAPSIZE.x; j++ ) {
-			for ( long i = 0; i < MAPSIZE.y; i++ ) {
-				for ( long k = 0; k < MAPSIZE.z; k++ ) {
-					integral += getFLink( j , i , k )->value [ GROWTH_FACTOR ];
-					a_integral += ana3Dfunc( j * 0.5 - 15. , i * 0.5 - 15. , 0. , ft ) * pow( 0.5 , 3. );
-				}
-			}
-		}
-		cout << "INT_G = " << integral << endl;
-		cout << "A_INT_G = " << a_integral << endl;
-		cout << "ANA_SOL(0,0,0,1e-9) = " << ana3Dfunc( 0. , 0. , 0. , 1e-9 , 1 ) << endl;*/
 		getchar( );
 	}
 	// ### OUT DATA WRITE ###
