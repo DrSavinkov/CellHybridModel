@@ -1052,35 +1052,6 @@ int main( int argc , char** argv ) {
 		cout << ( IDI = ( pex1.convert( ) - pex2.convert( ) ).length( ) ) << endl;
 	}
 	vector<PointL> toPushFRC , toPushVESSEL;
-	//if (/*2d*/false ) {
-	//	for ( int j = 0; j < 51; j++ ) {
-	//		getFLink( 0 , j , 0 )->type = FRC;
-	//		getFLink( 50 , j , 0 )->type = FRC;
-	//	}
-	//}
-	//if (/*3d*/false ) {
-	//	for ( int i = 0; i < 61; i++ ) {
-	//		for ( int j = 0; j < 61; j++ ) {
-	//			for ( int k = 0; k < 61; k++ ) {
-	//				bool bound = i == 0 || j == 0 || k == 0 || i == 60 || j == 60 || k == 60;
-	//				if ( bound ) {
-	//					getFLink( i , j , k )->type = VESSEL;
-	//				}
-	//			}
-	//		}
-	//	}
-	//}
-	//if (/*2d*/false ) {
-	//	double u0 = 5.;
-	//	for ( int i = 0; i < 51; i++ ) {
-	//		for ( int j = 0; j < 51; j++ ) {
-	//			getFLink( i , j , 0 )->value [ GROWTH_FACTOR ] = u0;
-	//		}
-	//	}
-	//}
-	//if (/*3d*/false ) {
-	//	getFLink( 30 , 30 , 30 )->value [ GROWTH_FACTOR ] = 1.;
-	//}
 	for ( long i = 0; i < MAPSIZE.x; i++ ) {
 		for ( long j = 0; j < MAPSIZE.y; j++ ) {
 			for ( long k = 0; k < MAPSIZE.z; k++ ) {
@@ -1098,18 +1069,12 @@ int main( int argc , char** argv ) {
 	{
 		// внесение клеток в модель
 		//placeCellInRandomPlace( CD4p( ) );
-
 	}
 	gtc_start( );
 	double timeInfo = omp_get_wtime( ) , fullTime = 0;
 	system( "del cells_pos_view*.obj" );
 	system( "del screen*.bmp" );
 	for ( long SRETI = 0; SRETI < ITERS; SRETI++ ) {
-		cout << "PEX1 = (" << pex1.x << " " << pex1.y << " " << pex1.z << ");" << endl;
-		cout << "PEX2 = (" << pex2.x << " " << pex2.y << " " << pex2.z << ");" << endl;
-		cout << "AC " << all_cells.size( ) << " DC " << SRETI + 1 << "/" << ITERS << endl;
-		cout << all_cells [ 0 ]->LIFE << endl;
-		//getchar( );
 		{
 			// установление граничных условий
 #pragma omp parallel for
