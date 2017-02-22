@@ -62,7 +62,6 @@ void throwAllModels2Out( string s ) {
 	}
 }
 
-
 void wait( double seconds ) {
 	double ct = omp_get_wtime( );
 	while ( omp_get_wtime( ) - ct < seconds );
@@ -867,7 +866,7 @@ void cells_dynamic( ) {
 				if ( j == GROWTH_FACTOR ) {
 					double grab = grabFluidIntencity( cell , j );
 					if ( cell->ID == ID_CD4p || cell->ID == ID_CD4pi ) {
-						if ( grab > 120 ) {
+						if ( grab > 60 ) { // 60%
 							if ( cell->can_div( ) ) {
 								cell->MITOS = cell->MITOS_CONST;
 							}
@@ -928,7 +927,7 @@ template <typename T> void placeCellInRandomPlace( T ) {
 	cell->POS = PointF( a , b , c );
 	getFLink( a , b , c )->myCell = cell;
 }
-template <typename T> void placeCellInPlace( T , PointL P ) {
+template <typename T> bool placeCellInPlace( T , PointL P ) {
 	bool canPlace = false;
 	long a , b , c;
 	a = rand( ) % MAPSIZE.x;
@@ -942,11 +941,16 @@ template <typename T> void placeCellInPlace( T , PointL P ) {
 		if ( checkfree( PointL( a , b , c ) ) ) {
 			canPlace = true;
 		}
-
-		all_cells.push_back( cell );
-		cell->POS = PointF( a , b , c );
-		getFLink( a , b , c )->myCell = cell;
+		if ( canPlace ) {
+			all_cells.push_back( cell );
+			cell->POS = PointF( a , b , c );
+			getFLink( a , b , c )->myCell = cell;
+		}
+		else {
+			delete cell;
+		}
 	}
+	return canPlace;
 }
 
 PointF temperatureColor( double value , double max , double min ) {
@@ -955,9 +959,9 @@ PointF temperatureColor( double value , double max , double min ) {
 		return R;
 	}
 	double D = max - min;
-	PointF MAX( 1 , 1 , 0 );
-	PointF MID( 1 , 0 , 0 );
-	PointF MIN( 1 , 0 , 1 );
+	PointF MAX( 1 , 0 , 0 );
+	PointF MID( 0 , 1 , 0 );
+	PointF MIN( 0 , 0 , 1 );
 	if ( value > max ) {
 		value = max;
 	}
@@ -1003,13 +1007,13 @@ int main( int argc , char** argv ) {
 		// вся рабочая область
 		//system( "vpc.exe -ss 1.0 -lo sphere50RXXS.obj -ff -a -cl -wq sphere.pobj" );
 		// часть, которую нужно отпилить от ФРК
-		//system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv sphere.pobj -r -cl -wq remove.pobj" );
+		system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv sphere.pobj -r -cl -wq remove.pobj" );
 		// часть, которую нужно использовать в сети ФРК
-		//system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv remove.pobj -r -cl -wq frc_part.pobj" );
+		system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv remove.pobj -r -cl -wq frc_part.pobj" );
 	}
 	{
 		// НАСТРОЙТЕ ЗДЕСЬ КОЭФФИЦИЕНТЫ ДЕГРАДАЦИИ ВЕЩЕСТВ
-		degradation [ GROWTH_FACTOR ] = 0.0;
+		degradation [ GROWTH_FACTOR ] = 0.2;
 	}
 	vector<PointL> VL;
 	initZone( VL );
@@ -1017,7 +1021,7 @@ int main( int argc , char** argv ) {
 	MAP_MOVE = initMAP( VL );
 	long count = 0;
 	applyBounds( );
-	//applyModel( "frc_part.pobj" , MAP_MOVE , FRC );
+	applyModel( "frc_part.pobj" , MAP_MOVE , FRC );
 	double IDI = 0;
 	bool ex1 = true , ex2 = true;
 	for ( long i = 0; i < MAPSIZE.x; i++ ) {
@@ -1187,7 +1191,7 @@ int main( int argc , char** argv ) {
 				}
 			}
 			for ( long i = 0; i < all_cells.size( ); i++ ) {
-				loadModelForRezult( "mod_cell.obj" , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( 1 , 0 , 0 ) );
+				loadModelForRezult( "mod_cell.obj" , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
 			}
 			throwAllModels2Out( ( "cells_pos_view" + WARTS + ".obj" ).c_str( ) );
 			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -noslice -o screen" + WARTS + ".bmp -md 20.0 -rx 0.0 -ry " + "90.0" + " -rz 0.0" ).c_str( ) );
