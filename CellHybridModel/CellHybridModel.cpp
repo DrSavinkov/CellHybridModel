@@ -10,11 +10,44 @@ class lmtr {
 public:
 	long a , b , c;
 };
-vector<PointF> lmpoints2;
-vector<vector<lmtr>> lmtries2;
-vector<PointF> lmColors2;
+vector<PointF> lmpoints;
+vector<vector<lmtr>> lmtries;
+vector<PointF> lmColors;
+class lmModel {
+public:
+	vector<PointF> lmpoints;
+	vector<lmtr> lmtries;
+	void loadModel( string s ) {
+		ifstream fin( s , ifstream::in );
+		if ( fin.is_open( ) ) {
+			lmtries.clear( );
+			//cout << "Fin \"" << s << "\" is open." << endl;
+			while ( !fin.eof( ) ) {
+				fin >> s;
+				if ( s == "v" ) {
+					double x , y , z;
+					fin >> x >> y >> z;
+					lmpoints.push_back( PointF( x , y , z ) );
+				}
+				if ( s == "f" ) {
+					long x , y , z;
+					fin >> x >> y >> z;
+					x--;
+					y--;
+					z--;
+					lmtr b;
+					b.a = x;
+					b.b = y;
+					b.c = z;
+					lmtries.push_back( b );
+				}
+			}
+			fin.close( );
+		}
+	}
+};
 void loadModelForRezult( string s , PointF POS , double zoom , PointF color ) {
-	long pid = long( lmpoints2.size( ) );
+	long pid = long( lmpoints.size( ) );
 	ifstream fin( s , ifstream::in );
 	if ( fin.is_open( ) ) {
 		vector<lmtr> tries;
@@ -24,7 +57,7 @@ void loadModelForRezult( string s , PointF POS , double zoom , PointF color ) {
 			if ( s == "v" ) {
 				double x , y , z;
 				fin >> x >> y >> z;
-				lmpoints2.push_back( PointF( x*zoom + POS.x , y*zoom + POS.y , z*zoom + POS.z ) );
+				lmpoints.push_back( PointF( x*zoom + POS.x , y*zoom + POS.y , z*zoom + POS.z ) );
 			}
 			if ( s == "f" ) {
 				long x , y , z;
@@ -40,22 +73,38 @@ void loadModelForRezult( string s , PointF POS , double zoom , PointF color ) {
 			}
 		}
 		if ( tries.size( ) ) {
-			lmColors2.push_back( color );
-			lmtries2.push_back( tries );
+			lmColors.push_back( color );
+			lmtries.push_back( tries );
 		}
 		fin.close( );
+	}
+}
+void pushLmModel( lmModel md , PointF POS , double zoom , PointF color ) {
+	long pid = long( lmpoints.size( ) );
+	vector<lmtr> tries = md.lmtries;
+	for ( long i = 0; i < md.lmpoints.size( ); i++ ) {
+		lmpoints.push_back( md.lmpoints [ i ] * zoom + POS );
+	}
+	for ( long i = 0; i < tries.size( ); i++ ) {
+		tries [ i ].a += pid;
+		tries [ i ].b += pid;
+		tries [ i ].c += pid;
+	}
+	if ( tries.size( ) ) {
+		lmColors.push_back( color );
+		lmtries.push_back( tries );
 	}
 }
 void throwAllModels2Out( string s ) {
 	ofstream fout( s , ofstream::out );
 	if ( fout.is_open( ) ) {
-		for ( long i = 0; i < lmpoints2.size( ); i++ ) {
-			fout << "v " << lmpoints2 [ i ].x << " " << lmpoints2 [ i ].y << " " << lmpoints2 [ i ].z << endl;
+		for ( long i = 0; i < lmpoints.size( ); i++ ) {
+			fout << "v " << lmpoints [ i ].x << " " << lmpoints [ i ].y << " " << lmpoints [ i ].z << endl;
 		}
-		for ( long i = 0; i < lmtries2.size( ); i++ ) {
-			fout << "#_NEW_MODEL " << lmColors2 [ i ].x << " " << lmColors2 [ i ].y << " " << lmColors2 [ i ].z << endl;
-			for ( long j = 0; j < lmtries2 [ i ].size( ); j++ ) {
-				fout << "f " << lmtries2 [ i ] [ j ].a + 1 << " " << lmtries2 [ i ] [ j ].b + 1 << " " << lmtries2 [ i ] [ j ].c + 1 << endl;
+		for ( long i = 0; i < lmtries.size( ); i++ ) {
+			fout << "#_NEW_MODEL " << lmColors [ i ].x << " " << lmColors [ i ].y << " " << lmColors [ i ].z << endl;
+			for ( long j = 0; j < lmtries [ i ].size( ); j++ ) {
+				fout << "f " << lmtries [ i ] [ j ].a + 1 << " " << lmtries [ i ] [ j ].b + 1 << " " << lmtries [ i ] [ j ].c + 1 << endl;
 			}
 		}
 		fout.close( );
@@ -90,14 +139,14 @@ const static long FLUID_ZONE_N = 1;
 #define GROWTH_FACTOR 0
 #define INFLAMMATORY_FACTOR 1
 #define VIRUS_FACTOR 2
-const static double ft = 10.; // 1 hour
+const static double ft = 1.; // 1 hour
 const static double dt = 0.1; // discretization 0.05*0.05 / 10. = 0.00025
 const static double MAX_CELL_DIAMETER = 6.;
-const static double VEC_MOD = 0.5; // доля старого вектора, оставляемая на итерации
-const static double R_MOD = 0.01; // доля вектора, определяемая случайным значением
-const static double WALL__TOUCH_FORCE_COEFFICIENT = 0.3 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
-const static double CELL__TOUCH_FORCE_COEFFICIENT = 0.3 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
-const static double FLUID_TOUCH_FORCE_COEFFICIENT = 0.4 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
+const static double VEC_MOD = 0.75; // доля старого вектора, оставляемая на итерации
+const static double R_MOD = 0.1; // доля вектора, определяемая случайным значением
+const static double WALL__TOUCH_FORCE_COEFFICIENT = 0.6 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
+const static double CELL__TOUCH_FORCE_COEFFICIENT = 0.2 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
+const static double FLUID_TOUCH_FORCE_COEFFICIENT = 0.3 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
 const static long ITERS = long( ( ft / dt ) + 0.5 );
 double degradation [ FLUID_ZONE_N ] = { 0. };
 double RND( ) {
@@ -107,9 +156,9 @@ class PointL {
 public:
 	long x , y , z;
 	PointL( PointF p = PointF( ) ) {
-		x = long( p.x + ( int( x > 0 ) - int( x < 0 ) ) * 0.5 );
-		y = long( p.y + ( int( y > 0 ) - int( y < 0 ) ) * 0.5 );
-		z = long( p.z + ( int( z > 0 ) - int( z < 0 ) ) * 0.5 );
+		x = long( p.x + ( int( p.x > 0 ) - int( p.x < 0 ) ) * 0.5 );
+		y = long( p.y + ( int( p.y > 0 ) - int( p.y < 0 ) ) * 0.5 );
+		z = long( p.z + ( int( p.z > 0 ) - int( p.z < 0 ) ) * 0.5 );
 	}
 	PointL( double X , double Y , double Z ) {
 		x = long( X + ( int( X > 0 ) - int( X < 0 ) ) * 0.5 );
@@ -597,10 +646,10 @@ double try_move( CELL* cell ) {
 	auto check_points = splitVector( cell->POS , move_to );
 	double ML = 1.;
 	for ( long i = 1; ( i < check_points.size( ) ) && ( ML == 1. ); i++ ) {
-		if ( check( check_points [ i ] ) ) {
-			PointL PL( check_points [ i ] );
+		PointL PL = check_points [ i ];
+		if ( check( PL ) ) {
 			bool Interruptor_Reasons = false;
-			if ( MAP [ PL.x ] [ PL.y ] [ PL.z ]->type != NORMAL ) {
+			if ( getFLink( PL )->type != NORMAL ) {
 				// врежемся в какую-нибудь структуру
 				/*cout << "INTERRUPTED BY WALL" << endl;*/
 				Interruptor_Reasons = true;
@@ -633,10 +682,10 @@ double try_move( CELL* cell ) {
 			auto check_points = splitVector( cell->POS , move_to );
 			double ML = 1.;
 			for ( long i = 1; ( i < check_points.size( ) ) && ( ML == 1. ); i++ ) {
-				if ( check( check_points [ i ] ) ) {
-					PointL PL( check_points [ i ] );
+				PointL PL = check_points [ i ];
+				if ( check( PL ) ) {
 					bool Interruptor_Reasons = false;
-					if ( MAP [ PL.x ] [ PL.y ] [ PL.z ]->type != NORMAL ) {
+					if ( getFLink( PL )->type != NORMAL ) {
 						// врежемся в какую-нибудь структуру
 						/*cout << "INTERRUPTED BY WALL" << endl;*/
 						Interruptor_Reasons = true;
@@ -797,6 +846,7 @@ PointL pex1 , pex2;
 void cells_dynamic( ) {
 #pragma omp parallel for
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
+		srand( unsigned int( i ) );
 		bool end_of_mitos;
 		// обновляем возраст
 		all_cells [ i ]->stat_time_update( dt , end_of_mitos );
@@ -1049,9 +1099,12 @@ double ana3Dfunc( double x , double y , double z , double t , bool cou = false )
 	return ( 0.125 / ( pow( 4. * PI * t , 1.5 ) ) )*exp( ( -1. / ( 4. * t ) ) * ( x * x + y * y + z * z ) );
 }
 int main( int argc , char** argv ) {
+	lmModel lmcube , lmcell;
+	lmcube.loadModel( "mod_cube.obj" );
+	lmcell.loadModel( "mod_cell.obj" );
 	if ( 1 ) {
 		// вся рабочая область
-		system( "vpc.exe -ss 1.0 -lo sphere10R.obj -ff -a -cl -wq sphere.pobj" );
+		//system( "vpc.exe -ss 1.0 -lo sphere10R.obj -ff -a -cl -wq sphere.pobj" );
 		// вся рабочая область
 		//system( "vpc.exe -ss 1.0 -lo sphere50RXXS.obj -ff -a -cl -wq sphere.pobj" );
 		// часть, которую нужно отпилить от ФРК
@@ -1087,7 +1140,7 @@ int main( int argc , char** argv ) {
 	}
 	{
 		// внесение клеток в модель
-		for ( int i = 0; i < 3; i++ ) {
+		for ( int i = 0; i < 700; i++ ) {
 			placeCellInRandomPlace( CD4p( ) );
 		}
 		/*
@@ -1166,16 +1219,16 @@ int main( int argc , char** argv ) {
 			char WART [ 4096 ];
 			sprintf( WART , "_%07ld" , SRETI );
 			string WARTS( WART );
-			lmpoints2.clear( );
-			lmtries2.clear( );
-			lmColors2.clear( );
+			lmpoints.clear( );
+			lmtries.clear( );
+			lmColors.clear( );
 			long ct = 0;
 			for ( long i = 0; i < MAPSIZE.x; i++ ) {
 				for ( long j = 0; j < MAPSIZE.y; j++ ) {
 					for ( long k = 0; k < MAPSIZE.z; k++ ) {
 						if ( check( i , j , k ) ) {
 							if ( getFLink( i , j , k )->type != NORMAL &&  getFLink( i , j , k )->type != BOUND ) {
-								loadModelForRezult( "mod_cube.obj" ,
+								/*loadModelForRezult( "mod_cube.obj" ,
 													PointF( i , j , k ) + DXYZ ,
 													0.125 * ( 1 + int( getFLink( i , j , k )->type == FRC ) * 7 ) ,
 													PointF(
@@ -1183,11 +1236,24 @@ int main( int argc , char** argv ) {
 													1 ,
 													int( getFLink( i , j , k )->type != FRC )
 								)
-								);
+								);*/
+								pushLmModel( lmcube , PointF( i , j , k ) + DXYZ ,
+											 0.125 * ( 1 + int( getFLink( i , j , k )->type == FRC ) * 7 ) ,
+											 PointF(
+											 int( getFLink( i , j , k )->type != FRC ) ,
+											 1 ,
+											 int( getFLink( i , j , k )->type != FRC )
+								) * 0.5 );
 							}
-							if ( getFLink( i , j , k )->type == NORMAL &&  getFLink( i , j , k )->value [ GROWTH_FACTOR ] > EPS ) {
-								loadModelForRezult(
+							if ( false && getFLink( i , j , k )->type == NORMAL &&  getFLink( i , j , k )->value [ GROWTH_FACTOR ] > EPS ) {
+								/*loadModelForRezult(
 									"mod_cube.obj" ,
+									PointF( i , j , k ) + DXYZ ,
+									0.0099 * getFLink( i , j , k )->value [ GROWTH_FACTOR ] ,
+									temperatureColor( getFLink( i , j , k )->value [ GROWTH_FACTOR ] , 100. , 0. )
+								);*/
+								pushLmModel(
+									lmcube ,
 									PointF( i , j , k ) + DXYZ ,
 									0.0099 * getFLink( i , j , k )->value [ GROWTH_FACTOR ] ,
 									temperatureColor( getFLink( i , j , k )->value [ GROWTH_FACTOR ] , 100. , 0. )
@@ -1198,10 +1264,11 @@ int main( int argc , char** argv ) {
 				}
 			}
 			for ( long i = 0; i < all_cells.size( ); i++ ) {
-				loadModelForRezult( "mod_cell.obj" , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
+				//loadModelForRezult( "mod_cell.obj" , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
+				pushLmModel( lmcell , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
 			}
 			throwAllModels2Out( ( "cells_pos_view" + WARTS + ".obj" ).c_str( ) );
-			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -noslice -o screen" + WARTS + ".bmp -md 20.0 -rx 0.0 -ry " + "90.0" + " -rz 0.0" ).c_str( ) );
+			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -noslice -o screen" + WARTS + ".bmp -md 100.0 -rx 0.0 -ry " + "90.0" + " -rz 0.0" ).c_str( ) );
 		}
 		//getchar( );
 	}
