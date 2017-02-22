@@ -90,7 +90,7 @@ const static long FLUID_ZONE_N = 1;
 #define GROWTH_FACTOR 0
 #define INFLAMMATORY_FACTOR 1
 #define VIRUS_FACTOR 2
-const static double ft = 60.; // 1 hour
+const static double ft = 10.; // 1 hour
 const static double dt = 0.1; // discretization 0.05*0.05 / 10. = 0.00025
 const static double MAX_CELL_DIAMETER = 6.;
 const static double VEC_MOD = 0.5; // доля старого вектора, оставляемая на итерации
