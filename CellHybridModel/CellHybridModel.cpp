@@ -592,8 +592,8 @@ double try_move( CELL* cell ) {
 	PointF RMOD = PointF( rnd( ) , rnd( ) , rnd( ) ).normalize( ) * R_MOD * dt; // Random MODificator
 	cell->VEC += RMOD;
 	PointF move_to = cell->POS + cell->VEC * cell->SPEED * dt;
-	cout << "Try move from (" << cell->POS.x << ", " << cell->POS.y << ", " << cell->POS.z << ") to (" <<
-		move_to.x << ", " << move_to.y << ", " << move_to.z << ")" << endl;
+	/*cout << "Try move from (" << cell->POS.x << ", " << cell->POS.y << ", " << cell->POS.z << ") to (" <<
+		move_to.x << ", " << move_to.y << ", " << move_to.z << ")" << endl;*/
 	auto check_points = splitVector( cell->POS , move_to );
 	double ML = 1.;
 	for ( long i = 1; ( i < check_points.size( ) ) && ( ML == 1. ); i++ ) {
@@ -602,12 +602,12 @@ double try_move( CELL* cell ) {
 			bool Interruptor_Reasons = false;
 			if ( MAP [ PL.x ] [ PL.y ] [ PL.z ]->type != NORMAL ) {
 				// врежемся в какую-нибудь структуру
-				cout << "INTERRUPTED BY WALL" << endl;
+				/*cout << "INTERRUPTED BY WALL" << endl;*/
 				Interruptor_Reasons = true;
 			}
 			else {
 				if ( getFLink( PL )->myCell != NULL && getFLink( PL )->myCell != cell ) {
-					cout << "INTERRUPTED BY CELL" << endl;
+					/*cout << "INTERRUPTED BY CELL" << endl;*/
 					// врежемся в какую-то клетку
 					Interruptor_Reasons = true;
 				}
@@ -620,6 +620,55 @@ double try_move( CELL* cell ) {
 			// вылетели из рабочей области
 			ML = double( i - 1 ) / double( check_points.size( ) - 1 );
 		}
+	}
+	if ( ML == 0 ) {
+		PointF move_to_ [ 3 ] = { PointF( move_to.x , cell->POS.y , cell->POS.z ),
+		PointF( cell->POS.x , move_to.y , cell->POS.z ),
+		PointF( cell->POS.x , cell->POS.y , move_to.z ) };
+		double ML_ [ 3 ];
+		for ( int MLC = 0; MLC < 3; MLC++ ) {
+			PointF move_to = move_to_ [ MLC ];
+			/*cout << "Try move from (" << cell->POS.x << ", " << cell->POS.y << ", " << cell->POS.z << ") to (" <<
+				move_to.x << ", " << move_to.y << ", " << move_to.z << ")" << endl;*/
+			auto check_points = splitVector( cell->POS , move_to );
+			double ML = 1.;
+			for ( long i = 1; ( i < check_points.size( ) ) && ( ML == 1. ); i++ ) {
+				if ( check( check_points [ i ] ) ) {
+					PointL PL( check_points [ i ] );
+					bool Interruptor_Reasons = false;
+					if ( MAP [ PL.x ] [ PL.y ] [ PL.z ]->type != NORMAL ) {
+						// врежемся в какую-нибудь структуру
+						/*cout << "INTERRUPTED BY WALL" << endl;*/
+						Interruptor_Reasons = true;
+					}
+					else {
+						if ( getFLink( PL )->myCell != NULL && getFLink( PL )->myCell != cell ) {
+							/*cout << "INTERRUPTED BY CELL" << endl;*/
+							// врежемся в какую-то клетку
+							Interruptor_Reasons = true;
+						}
+					}
+					if ( Interruptor_Reasons ) {
+						ML = double( i - 1 ) / double( check_points.size( ) - 1 );
+					}
+				}
+				else {
+					// вылетели из рабочей области
+					ML = double( i - 1 ) / double( check_points.size( ) - 1 );
+				}
+			}
+			ML_ [ MLC ] = ML;
+		}
+		double MLL = ML;
+		PointF move_too = move_to;
+		for ( int MLC = 0; MLC < 3; MLC++ ) {
+			if ( ( ( move_to_ [ MLC ] - cell->POS ) * ML_ [ MLC ] ) > ( ( move_too - cell->POS ) * MLL ) ) {
+				MLL = ML_ [ MLC ];
+				move_too = move_to_ [ MLC ];
+			}
+		}
+		ML = MLL;
+		move_to = move_too;
 	}
 	PointF final_pos = cell->POS + ( move_to - cell->POS ) * ML;
 	// мы провели все необходимые проверки, теперь можно сменить координату клетки
@@ -745,7 +794,6 @@ double grabFluidIntencity( CELL* cell , long j/*fluid id*/ ) {
 	return sum;
 }
 PointL pex1 , pex2;
-double cellDoneMkm = 0.;
 void cells_dynamic( ) {
 #pragma omp parallel for
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
@@ -778,12 +826,12 @@ void cells_dynamic( ) {
 				all_cells [ i ]->DIV_INTERVAL = all_cells [ i ]->DIV_INTERVAL_CONST;
 				all_cells [ i ]->LIFE = all_cells [ i ]->LIFE_CONST;
 			}
-			cellDoneMkm += try_move( all_cells [ i ] );
-			cout <<
+			try_move( all_cells [ i ] );
+			/*cout <<
 				"CELL[" << i << "], " <<
 				"POS=(" << all_cells [ i ]->POS.x << ", " << all_cells [ i ]->POS.y << ", " << all_cells [ i ]->POS.z << "), " <<
 				"VEC=(" << all_cells [ i ]->VEC.x << ", " << all_cells [ i ]->VEC.y << ", " << all_cells [ i ]->VEC.z << ") [" <<
-				all_cells [ i ]->VEC.length( ) << "]" << endl;
+				all_cells [ i ]->VEC.length( ) << "]" << endl;*/
 		}
 	}
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
@@ -1007,9 +1055,9 @@ int main( int argc , char** argv ) {
 		// вся рабочая область
 		//system( "vpc.exe -ss 1.0 -lo sphere50RXXS.obj -ff -a -cl -wq sphere.pobj" );
 		// часть, которую нужно отпилить от ФРК
-		system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv sphere.pobj -r -cl -wq remove.pobj" );
+		//system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv sphere.pobj -r -cl -wq remove.pobj" );
 		// часть, которую нужно использовать в сети ФРК
-		system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv remove.pobj -r -cl -wq frc_part.pobj" );
+		//system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv remove.pobj -r -cl -wq frc_part.pobj" );
 	}
 	{
 		// НАСТРОЙТЕ ЗДЕСЬ КОЭФФИЦИЕНТЫ ДЕГРАДАЦИИ ВЕЩЕСТВ
@@ -1022,39 +1070,6 @@ int main( int argc , char** argv ) {
 	long count = 0;
 	applyBounds( );
 	applyModel( "frc_part.pobj" , MAP_MOVE , FRC );
-	double IDI = 0;
-	bool ex1 = true , ex2 = true;
-	for ( long i = 0; i < MAPSIZE.x; i++ ) {
-		for ( long j = 0; j < MAPSIZE.y && ex1; j++ ) {
-			if ( check( i , j , 1 ) ) {
-				if ( getFLink( i , j , 1 )->type == NORMAL ) {
-					getFLink( i , j , 1 )->type = FRC;
-					cout << "SUCCESS #1 (" << i << " " << j << " " << 1 << ")" << endl;
-					ex1 = false;
-					pex1 = PointL( i , j , 0 );
-					//getchar( );
-				}
-			}
-		}
-	}
-	for ( long i = 0; i < MAPSIZE.x; i++ ) {
-		for ( long j = 0; j < MAPSIZE.y && ex2; j++ ) {
-			if ( check( i , j , MAPSIZE.z - 2 ) ) {
-				if ( getFLink( i , j , MAPSIZE.z - 2 )->type == NORMAL ) {
-					cout << "SUCCESS #2 (" << i << " " << j << " " << MAPSIZE.z - 2 << ")" << endl;
-					ex2 = false;
-					pex2 = PointL( i , j , MAPSIZE.z - 2 );
-					//getchar( );
-				}
-			}
-		}
-	}
-	cout << count << endl;
-	if ( !( ex1 || ex2 ) ) {
-		cout << "Initializing.." << endl;
-		placeCellInPlace( CD4p( ) , pex2 );
-		cout << ( IDI = ( pex1.convert( ) - pex2.convert( ) ).length( ) ) << endl;
-	}
 	vector<PointL> toPushFRC , toPushVESSEL;
 	for ( long i = 0; i < MAPSIZE.x; i++ ) {
 		for ( long j = 0; j < MAPSIZE.y; j++ ) {
@@ -1072,8 +1087,9 @@ int main( int argc , char** argv ) {
 	}
 	{
 		// внесение клеток в модель
-		//placeCellInRandomPlace( CD4p( ) );
-
+		for ( int i = 0; i < 3; i++ ) {
+			placeCellInRandomPlace( CD4p( ) );
+		}
 		/*
 			Разработка агентной модели миграции и взаимодействия клеточных популяций и ВИЧ в замкнутой области лимфатического узла
 		*/
@@ -1110,15 +1126,6 @@ int main( int argc , char** argv ) {
 		// динамика клеток
 		cells_dynamic( );
 		cout << endl << endl;
-		cout << "CELL_DONE_MKM = " << cellDoneMkm << " ( ~" << cellDoneMkm / ( ( SRETI + 1 ) * dt ) << " mkm per minute)" << endl << endl << endl;
-		//wait(4.);
-		double DD = ( all_cells [ 0 ]->POS - pex1.convert( ) ).length( );
-		if ( DD < 3.5 ) {
-			cout << "CELL ACHIEVED THE POINT!" << endl;
-			cout << "It took " << SRETI * dt << " minutes" << endl;
-			cout << "Relative speed = " << IDI / ( SRETI * dt ) << " mkm/min" << endl;
-			//getchar( );
-		}
 		// Захват времени выполнения, вычисление оставшегося времени
 		if ( omp_get_wtime( ) - timeInfo > 10. ) {
 			timeInfo = omp_get_wtime( ) - timeInfo;
