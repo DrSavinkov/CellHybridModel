@@ -135,11 +135,11 @@ double gtc_stop( ) {
 PointF noize( ) {
 	return PointF( rnd( ) , rnd( ) , rnd( ) ).normalize( ) * EPS;
 }
-const static long FLUID_ZONE_N = 1;
+const static long FLUID_ZONE_N = 3;
 #define GROWTH_FACTOR 0
 #define INFLAMMATORY_FACTOR 1
 #define VIRUS_FACTOR 2
-const static double ft = 1.; // 1 hour
+const static double ft = 72 * 60; // 1 hour
 const static double dt = 0.1; // discretization 0.05*0.05 / 10. = 0.00025
 const static double MAX_CELL_DIAMETER = 6.;
 const static double VEC_MOD = 0.75; // доля старого вектора, оставляемая на итерации
@@ -272,18 +272,27 @@ void initSemaphores( ) {
 	F.resize( FLUID_ZONE_N );
 	// cd4+
 	F [ GROWTH_FACTOR ] = true;
+	F [ INFLAMMATORY_FACTOR ] = false;
+	F [ VIRUS_FACTOR ] = false;
 	semaphores_attract [ ID_CD4p ] = F;
 	semaphores_attract [ ID_CD4pi ] = F;
+	F [ GROWTH_FACTOR ] = false;
+	F [ INFLAMMATORY_FACTOR ] = true;
 	semaphores_attract [ ID_CD8p ] = F;
 	F [ GROWTH_FACTOR ] = false;
+	F [ INFLAMMATORY_FACTOR ] = false;
+	F [ VIRUS_FACTOR ] = false;
 	semaphores_fear [ ID_CD4p ] = F;
 	semaphores_fear [ ID_CD4pi ] = F;
 	semaphores_fear [ ID_CD8p ] = F;
 	vector<double> F2;
 	F2.resize( FLUID_ZONE_N );
 	F2 [ GROWTH_FACTOR ] = 0.;
+	F2 [ INFLAMMATORY_FACTOR ] = 0.;
+	F2 [ VIRUS_FACTOR ] = 0.;
 	semaphores_produce [ ID_CD4p ] = F2;
 	semaphores_produce [ ID_CD4pi ] = F2;
+	F2 [ INFLAMMATORY_FACTOR ] = 1.;
 	semaphores_produce [ ID_CD8p ] = F2;
 }
 PointL initMAP( vector<PointL> &P ) {
@@ -808,22 +817,28 @@ PointF selectMovePath( CELL* cell , long j/*fluid id*/ ) {
 			FL_MIN = i;
 		}
 	}
-	cout << "VALMAX = " << valMax << endl;
+	//cout << "VALMAX = " << valMax << endl;
 	double SUM = 0.;
 	double minus_all = FLUIDS [ FL_MIN ];
-	cout << "MINUS_ALL = " << minus_all << endl;
+	//cout << "MINUS_ALL = " << minus_all << endl;
 	for ( long i = 0; i < FLUIDS.size( ); i++ ) {
 		FLUIDS [ i ] -= minus_all;
 		SUM += FLUIDS [ i ];
 	}
-	cout << "SUM = " << SUM << endl;
+	//cout << "SUM = " << SUM << endl;
 	SUM *= RND( );
 	PointF NEW_PATH( cell->POS );
 	if ( SUM > EPS ) {
 		long PATHGO = -1;
-		while ( SUM > 0. ) {
+		while ( SUM > EPS ) {
 			PATHGO++;
 			SUM -= FLUIDS [ PATHGO ];
+		}
+		if ( PATHGO >= to_analyse.size( ) ) {
+			PATHGO = long( to_analyse.size( ) ) - 1;
+		}
+		if ( PATHGO < 0 ) {
+			PATHGO = 0;
 		}
 		NEW_PATH = to_analyse [ 0 * VMAX + 1 * PATHGO ].convert( );
 	}
@@ -844,31 +859,75 @@ double grabFluidIntencity( CELL* cell , long j/*fluid id*/ ) {
 }
 PointL pex1 , pex2;
 void cells_dynamic( ) {
+	unsigned int GLOBAL_TIME = unsigned int( time( NULL ) );
 #pragma omp parallel for
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
-		srand( unsigned int( i ) );
+		srand( unsigned int( i ) + GLOBAL_TIME );
 		bool end_of_mitos;
 		// обновляем возраст
 		all_cells [ i ]->stat_time_update( dt , end_of_mitos );
 		if ( all_cells [ i ]->live( ) ) {
+			//end_of_mitos = all_cells [ i ]->
 			if ( all_cells [ i ]->ID == ID_CD4p || all_cells [ i ]->ID == ID_CD4pi ) {
 				// делаем указатель на типизированную клетку
 				CD4p *cell = ( CD4p* ) all_cells [ i ];
 				if ( end_of_mitos ) {
-					// закончился митоз, создаём клетку
-					CELL* new_cell = new CD4p( cell->POS + noize( ) , cell->ID );
+					// проверяем на наличие свободной ячейки рядом
+					PointL CCP( cell->POS );
+					PointL NCP;
+					bool ICAN = false;
+					for ( int dx = -1; dx < 2; dx++ ) {
+						for ( int dy = -1; dy < 2; dy++ ) {
+							for ( int dz = -1; dz < 2; dz++ ) {
+								if ( dx != 0 || dy != 0 || dz != 0 ) {
+									if ( check( CCP.x + dx , CCP.y + dy , CCP.z + dz ) ) {
+										if ( checkfree( PointL( CCP.x + dx , CCP.y + dy , CCP.z + dz ) ) ) {
+											ICAN = true;
+											NCP = PointL( CCP.x + dx , CCP.y + dy , CCP.z + dz );
+										}
+									}
+								}
+							}
+						}
+					}
+					if ( ICAN ) {
+						// закончился митоз, создаём клетку
+						CELL* new_cell = new CD4p( NCP.convert( ) , cell->ID );
 #pragma omp critical
-					all_cells.push_back( new_cell );
+						all_cells.push_back( new_cell );
+						getFLink( NCP )->myCell = new_cell;
+					}
 				}
 			}
 			if ( all_cells [ i ]->ID == ID_CD8p ) {
 				// делаем указатель на типизированную клетку
 				CD8p *cell = ( CD8p* ) all_cells [ i ];
 				if ( end_of_mitos ) {
-					// закончился митоз, создаём клетку
-					CELL* new_cell = new CD8p( cell->POS + noize( ) );
+					// проверяем на наличие свободной ячейки рядом
+					PointL CCP( cell->POS );
+					PointL NCP;
+					bool ICAN = false;
+					for ( int dx = -1; dx < 2; dx++ ) {
+						for ( int dy = -1; dy < 2; dy++ ) {
+							for ( int dz = -1; dz < 2; dz++ ) {
+								if ( dx != 0 || dy != 0 || dz != 0 ) {
+									if ( check( CCP.x + dx , CCP.y + dy , CCP.z + dz ) ) {
+										if ( checkfree( PointL( CCP.x + dx , CCP.y + dy , CCP.z + dz ) ) ) {
+											ICAN = true;
+											NCP = PointL( CCP.x + dx , CCP.y + dy , CCP.z + dz );
+										}
+									}
+								}
+							}
+						}
+					}
+					if ( ICAN ) {
+						// закончился митоз, создаём клетку
+						CELL* new_cell = new CD8p( NCP.convert( ) );
 #pragma omp critical
-					all_cells.push_back( new_cell );
+						all_cells.push_back( new_cell );
+						getFLink( NCP )->myCell = new_cell;
+					}
 				}
 			}
 			if ( end_of_mitos ) {
@@ -976,9 +1035,9 @@ void cells_dynamic( ) {
 				FluidVEC = FluidVEC.normalize( );
 			}
 			cell->VEC += FluidVEC * FLUID_TOUCH_FORCE_COEFFICIENT * dt;
-			cout << "CELL POS = (" << cell->POS.x << ", " << cell->POS.y << ", " << cell->POS.z << ")" << endl;
+			/*cout << "CELL POS = (" << cell->POS.x << ", " << cell->POS.y << ", " << cell->POS.z << ")" << endl;
 			cout << "VEC TO SOURCE = (" << pex1.convert( ).normalize( ).x << ", " << pex1.convert( ).normalize( ).y << ", " << pex1.convert( ).normalize( ).z << ")" << endl;
-			cout << "COS of ANGLES = " << ( pex1.convert( ).normalize( ) | FluidVEC.normalize( ) ) << endl;
+			cout << "COS of ANGLES = " << ( pex1.convert( ).normalize( ) | FluidVEC.normalize( ) ) << endl;*/
 			//getchar( );
 		}
 	}
@@ -987,11 +1046,19 @@ void cells_dynamic( ) {
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
 		if ( all_cells [ i ]->dead( ) ) {
 			if ( all_cells [ i ]->ID == ID_CD4p ) {
+				auto GFL = getFLink( all_cells [ i ]->POS );
+				if ( GFL != NULL ) {
+					GFL->myCell = NULL;
+				}
 				delete ( CD4p* ) all_cells [ i ];
 				all_cells [ i ] = NULL;
 			}
 			else {
 				if ( all_cells [ i ]->ID == ID_CD8p ) {
+					auto GFL = getFLink( all_cells [ i ]->POS );
+					if ( GFL != NULL ) {
+						GFL->myCell = NULL;
+					}
 					delete ( CD8p* ) all_cells [ i ];
 					all_cells [ i ] = NULL;
 				}
@@ -1178,9 +1245,10 @@ int main( int argc , char** argv ) {
 		}
 		// динамика клеток
 		cells_dynamic( );
-		cout << endl << endl;
+		//cout << endl << endl;
 		// Захват времени выполнения, вычисление оставшегося времени
 		if ( omp_get_wtime( ) - timeInfo > 10. ) {
+			cout << "ITER " << SRETI + 1 << " OF " << ITERS << endl;
 			timeInfo = omp_get_wtime( ) - timeInfo;
 			double perIter = ( fullTime + timeInfo ) / ( SRETI + 1 );
 			cout << "Please wait ";
@@ -1211,13 +1279,14 @@ int main( int argc , char** argv ) {
 			timeInfo = omp_get_wtime( );
 		}
 		bool REPORTS = true;
-		if ( REPORTS ) {
+		long EACHSRETI = 10;
+		if ( REPORTS && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % EACHSRETI ) == 0 ) ) ) {
 			double DX = -MAPSIZE.x / 2.;
 			double DY = -MAPSIZE.y / 2.;
 			double DZ = -MAPSIZE.z / 2.;
 			PointF DXYZ( DX , DY , DZ );
 			char WART [ 4096 ];
-			sprintf( WART , "_%07ld" , SRETI );
+			sprintf( WART , "_%07ld" , SRETI / EACHSRETI );
 			string WARTS( WART );
 			lmpoints.clear( );
 			lmtries.clear( );
