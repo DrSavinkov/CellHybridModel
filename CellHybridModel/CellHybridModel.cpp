@@ -139,11 +139,13 @@ const static long FLUID_ZONE_N = 3;
 #define GROWTH_FACTOR 0
 #define INFLAMMATORY_FACTOR 1
 #define VIRUS_FACTOR 2
-const static double ft = 72 * 60; // 1 hour
+const static double ft = 72 * 60;//10 * 60; // 10 hours
 const static double dt = 0.1; // discretization 0.05*0.05 / 10. = 0.00025
 const static double MAX_CELL_DIAMETER = 6.;
 const static double VEC_MOD = 0.75; // доля старого вектора, оставляемая на итерации
 const static double R_MOD = 0.1; // доля вектора, определяемая случайным значением
+const static double INFECT_CHANCE = 0.005;
+const static double KILL_CHANCE = 0.1;
 const static double WALL__TOUCH_FORCE_COEFFICIENT = 0.6 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
 const static double CELL__TOUCH_FORCE_COEFFICIENT = 0.2 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
 const static double FLUID_TOUCH_FORCE_COEFFICIENT = 0.3 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
@@ -186,7 +188,7 @@ public:
 		return ( LIFE > 0 );
 	}
 	bool can_div( ) {
-		return ( DIV_INTERVAL <= 0. ) && ( MITOS <= 0 ) && live( );
+		return ( DIV_INTERVAL <= 0. ) && ( MITOS <= 0. ) && live( );
 	}
 	bool dead( ) {
 		return ( LIFE <= 0 );
@@ -215,11 +217,11 @@ public:
 	CD4p( PointF P = PointF( ) , CELL_ID id = ID_CD4p ) {
 		VEC = PointF( );
 		POS = P;
-		DIV_INTERVAL = 0;
 		MITOS = 0;
 		LIFE = 14400 * int( id == ID_CD4p ) + 2160 * int( id == ID_CD4pi );
 		DIV_INTERVAL_CONST = 300;
 		MITOS_CONST = 60;
+		DIV_INTERVAL = DIV_INTERVAL_CONST;
 		LIFE_CONST = 14400 * int( id == ID_CD4p ) + 2160 * int( id == ID_CD4pi );
 		SPEED = 10;
 		RADIUS = 3.;
@@ -231,10 +233,10 @@ public:
 	CD8p( PointF P = PointF( ) ) {
 		VEC = PointF( );
 		POS = P;
-		DIV_INTERVAL = 0;
 		MITOS = 0;
 		LIFE = 20160;
 		DIV_INTERVAL_CONST = 420;
+		DIV_INTERVAL = DIV_INTERVAL_CONST;
 		MITOS_CONST = 60;
 		LIFE_CONST = 20160;
 		SPEED = 10;
@@ -266,7 +268,7 @@ FLUID_ZONE**** MAP = NULL;
 FLUID_ZONE_DUP**** dMAP = NULL;
 map<CELL_ID , vector<bool> > semaphores_attract;
 map<CELL_ID , vector<bool> > semaphores_fear;
-map<CELL_ID , vector<double> > semaphores_produce;
+//map<CELL_ID , vector<double> > semaphores_produce;
 void initSemaphores( ) {
 	vector<bool> F;
 	F.resize( FLUID_ZONE_N );
@@ -285,15 +287,15 @@ void initSemaphores( ) {
 	semaphores_fear [ ID_CD4p ] = F;
 	semaphores_fear [ ID_CD4pi ] = F;
 	semaphores_fear [ ID_CD8p ] = F;
-	vector<double> F2;
-	F2.resize( FLUID_ZONE_N );
-	F2 [ GROWTH_FACTOR ] = 0.;
-	F2 [ INFLAMMATORY_FACTOR ] = 0.;
-	F2 [ VIRUS_FACTOR ] = 0.;
-	semaphores_produce [ ID_CD4p ] = F2;
-	semaphores_produce [ ID_CD4pi ] = F2;
-	F2 [ INFLAMMATORY_FACTOR ] = 1.;
-	semaphores_produce [ ID_CD8p ] = F2;
+	//vector<double> F2;
+	//F2.resize( FLUID_ZONE_N );
+	//F2 [ GROWTH_FACTOR ] = 0.;
+	//F2 [ INFLAMMATORY_FACTOR ] = 0.;
+	//F2 [ VIRUS_FACTOR ] = 0.;
+	//semaphores_produce [ ID_CD4p ] = F2;
+	//semaphores_produce [ ID_CD8p ] = F2;
+	//F2 [ INFLAMMATORY_FACTOR ] = 1.;
+	//semaphores_produce [ ID_CD4pi ] = F2;
 }
 PointL initMAP( vector<PointL> &P ) {
 	long x = 0 , X = 0;
@@ -742,7 +744,7 @@ double try_move( CELL* cell ) {
 }
 void throw_fluid( PointL p , long ID , double volume ) {
 	if ( check( p ) && ID >= 0 && ID < FLUID_ZONE_N && volume >= 0. ) {
-		MAP [ p.x ] [ p.y ] [ p.z ]->value [ ID ] += volume;
+		getFLink( p )->value [ ID ] += volume;
 	}
 }
 void throw_fluid( CELL* cell , long ID , double volume ) {
@@ -849,12 +851,16 @@ double grabFluidIntencity( CELL* cell , long j/*fluid id*/ ) {
 	vector<double> grabbed;
 	double sum = 0.;
 	for ( long i = 0; i < to_analyse.size( ); i++ ) {
-		grabbed.push_back( getFLink( to_analyse [ i ] )->value [ j ] );
-		sum += grabbed [ i ];
+		double cv = getFLink( to_analyse [ i ] )->value [ j ];
+		//grabbed.push_back( getFLink( to_analyse [ i ] )->value [ j ] );
+		if ( sum < cv ) {
+			sum = cv;
+		}
+		// += grabbed [ i ];
 	}
-	if ( grabbed.size( ) > 1 ) {
-		sum /= grabbed.size( );
-	}
+	//if ( grabbed.size( ) > 1 ) {
+	//	sum /= grabbed.size( );
+	//}
 	return sum;
 }
 PointL pex1 , pex2;
@@ -867,7 +873,6 @@ void cells_dynamic( ) {
 		// обновляем возраст
 		all_cells [ i ]->stat_time_update( dt , end_of_mitos );
 		if ( all_cells [ i ]->live( ) ) {
-			//end_of_mitos = all_cells [ i ]->
 			if ( all_cells [ i ]->ID == ID_CD4p || all_cells [ i ]->ID == ID_CD4pi ) {
 				// делаем указатель на типизированную клетку
 				CD4p *cell = ( CD4p* ) all_cells [ i ];
@@ -893,9 +898,13 @@ void cells_dynamic( ) {
 					if ( ICAN ) {
 						// закончился митоз, создаём клетку
 						CELL* new_cell = new CD4p( NCP.convert( ) , cell->ID );
+						cell->DIV_INTERVAL = cell->DIV_INTERVAL_CONST;
 #pragma omp critical
 						all_cells.push_back( new_cell );
 						getFLink( NCP )->myCell = new_cell;
+						if ( cell->ID == ID_CD4pi ) {
+							throw_fluid( CCP , VIRUS_FACTOR , 500. );
+						}
 					}
 				}
 			}
@@ -924,6 +933,7 @@ void cells_dynamic( ) {
 					if ( ICAN ) {
 						// закончился митоз, создаём клетку
 						CELL* new_cell = new CD8p( NCP.convert( ) );
+						cell->DIV_INTERVAL = cell->DIV_INTERVAL_CONST;
 #pragma omp critical
 						all_cells.push_back( new_cell );
 						getFLink( NCP )->myCell = new_cell;
@@ -936,11 +946,12 @@ void cells_dynamic( ) {
 				all_cells [ i ]->LIFE = all_cells [ i ]->LIFE_CONST;
 			}
 			try_move( all_cells [ i ] );
-			/*cout <<
-				"CELL[" << i << "], " <<
-				"POS=(" << all_cells [ i ]->POS.x << ", " << all_cells [ i ]->POS.y << ", " << all_cells [ i ]->POS.z << "), " <<
-				"VEC=(" << all_cells [ i ]->VEC.x << ", " << all_cells [ i ]->VEC.y << ", " << all_cells [ i ]->VEC.z << ") [" <<
-				all_cells [ i ]->VEC.length( ) << "]" << endl;*/
+			PointL NCP( all_cells [ i ]->POS );
+			if ( all_cells [ i ]->ID == ID_CD4pi ) {
+				if ( check( NCP ) ) {
+					getFLink( NCP )->value [ INFLAMMATORY_FACTOR ] = 100.;
+				}
+			}
 		}
 	}
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
@@ -988,7 +999,7 @@ void cells_dynamic( ) {
 					}
 				}
 			}
-			if ( PushAwayVEC.length( ) > 1. ) {
+			if ( PushAwayVEC.length( ) > EPS ) {
 				PushAwayVEC = PushAwayVEC.normalize( );
 			}
 			cell->VEC += PushAwayVEC * WALL__TOUCH_FORCE_COEFFICIENT * dt;
@@ -1006,10 +1017,13 @@ void cells_dynamic( ) {
 						/*
 							ЗДЕСЬ ДОБАВЬТЕ ВСЯКУЮ ФИГНЮ ТИПА УБИЙСТВА КЛЕТОК И Т.П.
 						*/
+						if ( cell->ID == ID_CD8p && cell2->ID == ID_CD4pi && rnd( true ) < KILL_CHANCE ) {
+							cell2->LIFE = -1;
+						}
 					}
 				}
 			}
-			if ( InteractVEC.length( ) > 1. ) {
+			if ( InteractVEC.length( ) > EPS ) {
 				InteractVEC = InteractVEC.normalize( );
 			}
 			cell->VEC += InteractVEC * CELL__TOUCH_FORCE_COEFFICIENT * dt;
@@ -1023,29 +1037,46 @@ void cells_dynamic( ) {
 				if ( j == GROWTH_FACTOR ) {
 					double grab = grabFluidIntencity( cell , j );
 					if ( cell->ID == ID_CD4p || cell->ID == ID_CD4pi ) {
-						if ( grab > 60 ) { // 60%
-							if ( cell->can_div( ) ) {
+						if ( grab > 50. ) { // 50%
+							if ( cell->can_div( ) && to_interact.size( ) == 0 ) {
+								cell->MITOS = cell->MITOS_CONST;
+							}
+						}
+					}
+				}
+				if ( j == VIRUS_FACTOR && cell->ID == ID_CD4p ) {
+					double grab = grabFluidIntencity( cell , j );
+					if ( rnd( true ) < INFECT_CHANCE * grab ) {
+						cell->ID = ID_CD4pi;
+						if ( cell->LIFE > 1.5 * 24 * 60 ) {
+							cell->LIFE = 1.5 * 24 * 60;
+						}
+						cell->DIV_INTERVAL = 12 * 60;
+						cell->MITOS = 0;
+					}
+				}
+				if ( j == INFLAMMATORY_FACTOR ) {
+					double grab = grabFluidIntencity( cell , j );
+					if ( cell->ID == ID_CD8p ) {
+						if ( grab > 50. ) { // 50%
+							if ( cell->can_div( ) && to_interact.size( ) == 0 ) {
 								cell->MITOS = cell->MITOS_CONST;
 							}
 						}
 					}
 				}
 			}
-			if ( FluidVEC.length( ) > 1. ) {
+			if ( FluidVEC.length( ) > EPS ) {
 				FluidVEC = FluidVEC.normalize( );
 			}
 			cell->VEC += FluidVEC * FLUID_TOUCH_FORCE_COEFFICIENT * dt;
-			/*cout << "CELL POS = (" << cell->POS.x << ", " << cell->POS.y << ", " << cell->POS.z << ")" << endl;
-			cout << "VEC TO SOURCE = (" << pex1.convert( ).normalize( ).x << ", " << pex1.convert( ).normalize( ).y << ", " << pex1.convert( ).normalize( ).z << ")" << endl;
-			cout << "COS of ANGLES = " << ( pex1.convert( ).normalize( ) | FluidVEC.normalize( ) ) << endl;*/
-			//getchar( );
 		}
 	}
 	// удаление мёртвых клеток
 #pragma omp parallel for
 	for ( long i = 0; i < all_cells.size( ); i++ ) {
 		if ( all_cells [ i ]->dead( ) ) {
-			if ( all_cells [ i ]->ID == ID_CD4p ) {
+			if ( all_cells [ i ]->ID == ID_CD4p || all_cells [ i ]->ID == ID_CD4pi ) {
 				auto GFL = getFLink( all_cells [ i ]->POS );
 				if ( GFL != NULL ) {
 					GFL->myCell = NULL;
@@ -1068,7 +1099,7 @@ void cells_dynamic( ) {
 	// удаляем нуль-указатели
 	for ( long i = long( all_cells.size( ) ) - 1; i >= 0; i-- ) {
 		if ( all_cells [ i ] == NULL ) {
-			all_cells [ i ] = all_cells [ all_cells.size( ) ];
+			all_cells [ i ] = all_cells [ all_cells.size( ) - 1 ];
 			all_cells.pop_back( );
 		}
 	}
@@ -1083,9 +1114,7 @@ template <typename T> void placeCellInRandomPlace( T ) {
 		b = rand( ) % MAPSIZE.y;
 		c = rand( ) % MAPSIZE.z;
 		if ( check( a , b , c ) ) {
-			if ( checkfree( PointL( a , b , c ) ) ) {
-				canPlace = true;
-			}
+			canPlace = ( getFLink( a , b , c )->type == NORMAL ) && ( getFLink( a , b , c )->myCell == NULL );
 		}
 	}
 	all_cells.push_back( cell );
@@ -1104,7 +1133,7 @@ template <typename T> bool placeCellInPlace( T , PointL P ) {
 	if ( check( a , b , c ) ) {
 		CELL* cell = new T( );
 		if ( checkfree( PointL( a , b , c ) ) ) {
-			canPlace = true;
+			canPlace = getFLink( a , b , c )->type = NORMAL;
 		}
 		if ( canPlace ) {
 			all_cells.push_back( cell );
@@ -1172,8 +1201,8 @@ int main( int argc , char** argv ) {
 	if ( 1 ) {
 		// вся рабочая область
 		//system( "vpc.exe -ss 1.0 -lo sphere10R.obj -ff -a -cl -wq sphere.pobj" );
-		// вся рабочая область
 		//system( "vpc.exe -ss 1.0 -lo sphere50RXXS.obj -ff -a -cl -wq sphere.pobj" );
+		//system( "vpc.exe -ss 1.0 -lo sphere100R.obj -ff -a -cl -wq sphere.pobj" );
 		// часть, которую нужно отпилить от ФРК
 		//system( "vpc.exe -ss 1.0 -lo tffvpss.obj -ff -a -cl -lv sphere.pobj -r -cl -wq remove.pobj" );
 		// часть, которую нужно использовать в сети ФРК
@@ -1181,7 +1210,9 @@ int main( int argc , char** argv ) {
 	}
 	{
 		// НАСТРОЙТЕ ЗДЕСЬ КОЭФФИЦИЕНТЫ ДЕГРАДАЦИИ ВЕЩЕСТВ
-		degradation [ GROWTH_FACTOR ] = 0.2;
+		degradation [ GROWTH_FACTOR ] = 0.02;
+		degradation [ INFLAMMATORY_FACTOR ] = 0.1;
+		degradation [ VIRUS_FACTOR ] = 0.05;
 	}
 	vector<PointL> VL;
 	initZone( VL );
@@ -1189,7 +1220,19 @@ int main( int argc , char** argv ) {
 	MAP_MOVE = initMAP( VL );
 	long count = 0;
 	applyBounds( );
+	long TS = 50;
 	applyModel( "frc_part.pobj" , MAP_MOVE , FRC );
+	if ( 0 ) {
+		for ( int i = -2; i < 3; i++ ) {
+			getFLink( PointL( TS + i , TS , TS ) )->type = FRC;
+		}
+		for ( int i = -2; i < 3; i++ ) {
+			getFLink( PointL( TS , TS + i , TS ) )->type = FRC;
+		}
+		for ( int i = -2; i < 3; i++ ) {
+			getFLink( PointL( TS , TS , TS + i ) )->type = FRC;
+		}
+	}
 	vector<PointL> toPushFRC , toPushVESSEL;
 	for ( long i = 0; i < MAPSIZE.x; i++ ) {
 		for ( long j = 0; j < MAPSIZE.y; j++ ) {
@@ -1207,12 +1250,26 @@ int main( int argc , char** argv ) {
 	}
 	{
 		// внесение клеток в модель
-		for ( int i = 0; i < 700; i++ ) {
+		for ( int i = 0; i < 10; i++ ) {
+			// infected cd4+
 			placeCellInRandomPlace( CD4p( ) );
+			all_cells [ all_cells.size( ) - 1 ]->ID = ID_CD4pi;
+			all_cells [ all_cells.size( ) - 1 ]->LIFE *= rnd( true );
+			all_cells [ all_cells.size( ) - 1 ]->DIV_INTERVAL = 12 * 60; // just infected
 		}
-		/*
-			Разработка агентной модели миграции и взаимодействия клеточных популяций и ВИЧ в замкнутой области лимфатического узла
-		*/
+		for ( int i = 0; i < 100; i++ ) {
+			// health cd4+
+			placeCellInRandomPlace( CD4p( ) );
+			all_cells [ all_cells.size( ) - 1 ]->LIFE *= rnd( true );
+			all_cells [ all_cells.size( ) - 1 ]->DIV_INTERVAL *= rnd( true );
+		}
+		for ( int i = 0; i < 1; i++ ) {
+			// effectors cd8+
+			placeCellInRandomPlace( CD8p( ) );
+			all_cells [ all_cells.size( ) - 1 ]->LIFE *= rnd( true );
+			all_cells [ all_cells.size( ) - 1 ]->DIV_INTERVAL *= rnd( true );
+		}
+		/* Разработка агентной модели миграции и взаимодействия клеточных популяций и ВИЧ в замкнутой области лимфатического узла */
 	}
 	gtc_start( );
 	double timeInfo = omp_get_wtime( ) , fullTime = 0;
@@ -1223,7 +1280,6 @@ int main( int argc , char** argv ) {
 			// установление граничных условий
 #pragma omp parallel for
 			for ( long i = 0; i < toPushFRC.size( ); i++ ) {
-				//getFLink( toPushFRC [ i ] )->value [ GROWTH_FACTOR ] = 30. + 50. * int( toPushFRC [ i ].x == 0 );
 				getFLink( toPushFRC [ i ] )->value [ GROWTH_FACTOR ] = 100.;
 			}
 #pragma omp parallel for
@@ -1235,7 +1291,6 @@ int main( int argc , char** argv ) {
 			// установление граничных условий
 #pragma omp parallel for
 			for ( long i = 0; i < toPushFRC.size( ); i++ ) {
-				//getFLink( toPushFRC [ i ] )->value [ GROWTH_FACTOR ] = 30. + 50. * int( toPushFRC [ i ].x == 0 );
 				getFLink( toPushFRC [ i ] )->value [ GROWTH_FACTOR ] = 100.;
 			}
 #pragma omp parallel for
@@ -1245,7 +1300,116 @@ int main( int argc , char** argv ) {
 		}
 		// динамика клеток
 		cells_dynamic( );
-		//cout << endl << endl;
+		//******************************************************************************
+		bool REPORTS = !true;
+		long EACHSRETI = 100; /*POIU link*/
+		if ( REPORTS && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % EACHSRETI ) == 0 ) ) ) {
+			double DX = -MAPSIZE.x / 2.;
+			double DY = -MAPSIZE.y / 2.;
+			double DZ = -MAPSIZE.z / 2.;
+			PointF DXYZ( DX , DY , DZ );
+			char WART [ 4096 ];
+			sprintf( WART , "_%07ld" , SRETI / EACHSRETI );
+			string WARTS( WART );
+			lmpoints.clear( );
+			lmtries.clear( );
+			lmColors.clear( );
+			long ct = 0;
+			for ( long i = 0; i < MAPSIZE.x; i++ ) {
+				for ( long j = 0; j < MAPSIZE.y; j++ ) {
+					for ( long k = 0; k < MAPSIZE.z; k++ ) {
+						if ( check( i , j , k ) ) {
+							if ( getFLink( i , j , k )->type != NORMAL &&  getFLink( i , j , k )->type != BOUND ) {
+								pushLmModel( lmcube , PointF( i , j , k ) + DXYZ ,
+											 0.125 * ( 1 + int( getFLink( i , j , k )->type == FRC ) * 7 ) ,
+											 PointF(
+											 int( getFLink( i , j , k )->type != FRC ) ,
+											 1 ,
+											 int( getFLink( i , j , k )->type != FRC )
+								) * 0.5 );
+							}
+							if ( false && getFLink( i , j , k )->type == NORMAL &&  getFLink( i , j , k )->value [ GROWTH_FACTOR ] >= 50 ) {
+								pushLmModel(
+									lmcube ,
+									PointF( i , j , k ) + DXYZ ,
+									0.0099 * getFLink( i , j , k )->value [ GROWTH_FACTOR ] ,
+									temperatureColor( getFLink( i , j , k )->value [ GROWTH_FACTOR ] , 100. , 0. )
+								);
+							}
+						}
+					}
+				}
+			}
+			for ( long i = 0; i < all_cells.size( ); i++ ) {
+				//loadModelForRezult( "mod_cell.obj" , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
+				pushLmModel( lmcell ,
+							 all_cells [ i ]->POS + DXYZ ,
+							 all_cells [ i ]->RADIUS * 2. ,
+							 PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
+			}
+			throwAllModels2Out( ( "cells_pos_view" + WARTS + ".obj" ).c_str( ) );
+			char WARTS_S [ 4096 ];
+			sprintf( WARTS_S , "%lf" , SRETI * dt );
+			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -noslice -o screen" + WARTS + ".bmp -md 100.0 -rx 0.0 -ry " + string( WARTS_S )/*"90.0"*/ + " -rz 0.0" ).c_str( ) );
+			system( "del cells_pos_view*.obj" );
+		}
+		bool REPORTS_SHORT = true;
+		if ( REPORTS_SHORT && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % EACHSRETI ) == 0 ) ) ) {
+			if ( SRETI == 0 ) {
+				system( "del short_reports.txt" );
+			}
+			FILE *frep = fopen( "short_reports.txt" , "a" );
+			if ( SRETI == 0 ) {
+				fprintf( frep , "#time    cd4 cd4i cd8    growth_f inflammatory_f virus_f\n" );
+			}
+			double cd4 = 0 , cd4i = 0 , cd8 = 0 , virus = 0 , signal = 0 , growth = 0;
+			for ( long i = 0; i < MAPSIZE.x; i++ ) {
+				for ( long j = 0; j < MAPSIZE.y; j++ ) {
+					for ( long k = 0; k < MAPSIZE.z; k++ ) {
+						if ( check( i , j , k ) ) {
+							virus += getFLink( i , j , k )->value [ VIRUS_FACTOR ];
+							signal += getFLink( i , j , k )->value [ INFLAMMATORY_FACTOR ];
+							growth += getFLink( i , j , k )->value [ GROWTH_FACTOR ];
+							if ( getFLink( i , j , k )->myCell ) {
+								cd4 += int( getFLink( i , j , k )->myCell->ID == ID_CD4p );
+								cd4i += int( getFLink( i , j , k )->myCell->ID == ID_CD4pi );
+								cd8 += int( getFLink( i , j , k )->myCell->ID == ID_CD8p );
+							}
+						}
+					}
+				}
+			}
+			if ( growth < 0.1 ) {
+				growth = 0.1;
+			}
+			if ( signal < 0.1 ) {
+				signal = 0.1;
+			}
+			if ( virus < 0.1 ) {
+				virus = 0.1;
+			}
+			fprintf( frep , "%lf    %lf %lf %lf    %lf %lf %lf\n" , SRETI * dt , cd4 , cd4i , cd8 , growth , signal , virus );
+			fclose( frep );
+			ofstream fout( "gscript.sc" , ofstream::out );
+			fout <<
+				"set term png size 1920,1080 enhanced font 'Verdana,24'" << endl <<
+				"set output \"short_reports.png\"" << endl <<
+				"set grid" << endl <<
+				//"set key box opaque" << endl <<
+				"set key outside" << endl <<
+				"set termoption lw 5" << endl <<
+				"set logscale y" << endl <<
+				"set xlabel 'Time (min)'" << endl <<
+				"set ylabel 'Count (cells/particles)'" << endl <<
+				"plot \"short_reports.txt\" using 1:2 title 'CD4+ cells' with lines, \\" << endl <<// with lines
+				"\"short_reports.txt\" using 1:3 title 'CD4+ infected cells' with lines, \\" << endl <<
+				"\"short_reports.txt\" using 1:4 title 'CD8+ cells' with lines, \\" << endl <<
+				"\"short_reports.txt\" using 1:5 title 'Growth factor' with lines, \\" << endl <<
+				"\"short_reports.txt\" using 1:6 title 'Inflammatory factor' with lines, \\" << endl <<
+				"\"short_reports.txt\" using 1:7 title 'Free virus population' with lines" << endl;
+			fout.close( );
+			system( "gnuplot.exe gscript.sc" );
+		}
 		// Захват времени выполнения, вычисление оставшегося времени
 		if ( omp_get_wtime( ) - timeInfo > 10. ) {
 			cout << "ITER " << SRETI + 1 << " OF " << ITERS << endl;
@@ -1278,68 +1442,6 @@ int main( int argc , char** argv ) {
 			fullTime += timeInfo;
 			timeInfo = omp_get_wtime( );
 		}
-		bool REPORTS = true;
-		long EACHSRETI = 10;
-		if ( REPORTS && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % EACHSRETI ) == 0 ) ) ) {
-			double DX = -MAPSIZE.x / 2.;
-			double DY = -MAPSIZE.y / 2.;
-			double DZ = -MAPSIZE.z / 2.;
-			PointF DXYZ( DX , DY , DZ );
-			char WART [ 4096 ];
-			sprintf( WART , "_%07ld" , SRETI / EACHSRETI );
-			string WARTS( WART );
-			lmpoints.clear( );
-			lmtries.clear( );
-			lmColors.clear( );
-			long ct = 0;
-			for ( long i = 0; i < MAPSIZE.x; i++ ) {
-				for ( long j = 0; j < MAPSIZE.y; j++ ) {
-					for ( long k = 0; k < MAPSIZE.z; k++ ) {
-						if ( check( i , j , k ) ) {
-							if ( getFLink( i , j , k )->type != NORMAL &&  getFLink( i , j , k )->type != BOUND ) {
-								/*loadModelForRezult( "mod_cube.obj" ,
-													PointF( i , j , k ) + DXYZ ,
-													0.125 * ( 1 + int( getFLink( i , j , k )->type == FRC ) * 7 ) ,
-													PointF(
-													int( getFLink( i , j , k )->type != FRC ) ,
-													1 ,
-													int( getFLink( i , j , k )->type != FRC )
-								)
-								);*/
-								pushLmModel( lmcube , PointF( i , j , k ) + DXYZ ,
-											 0.125 * ( 1 + int( getFLink( i , j , k )->type == FRC ) * 7 ) ,
-											 PointF(
-											 int( getFLink( i , j , k )->type != FRC ) ,
-											 1 ,
-											 int( getFLink( i , j , k )->type != FRC )
-								) * 0.5 );
-							}
-							if ( false && getFLink( i , j , k )->type == NORMAL &&  getFLink( i , j , k )->value [ GROWTH_FACTOR ] > EPS ) {
-								/*loadModelForRezult(
-									"mod_cube.obj" ,
-									PointF( i , j , k ) + DXYZ ,
-									0.0099 * getFLink( i , j , k )->value [ GROWTH_FACTOR ] ,
-									temperatureColor( getFLink( i , j , k )->value [ GROWTH_FACTOR ] , 100. , 0. )
-								);*/
-								pushLmModel(
-									lmcube ,
-									PointF( i , j , k ) + DXYZ ,
-									0.0099 * getFLink( i , j , k )->value [ GROWTH_FACTOR ] ,
-									temperatureColor( getFLink( i , j , k )->value [ GROWTH_FACTOR ] , 100. , 0. )
-								);
-							}
-						}
-					}
-				}
-			}
-			for ( long i = 0; i < all_cells.size( ); i++ ) {
-				//loadModelForRezult( "mod_cell.obj" , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
-				pushLmModel( lmcell , all_cells [ i ]->POS + DXYZ , all_cells [ i ]->RADIUS , PointF( int( all_cells [ i ]->ID == ID_CD8p ) , int( all_cells [ i ]->ID == ID_CD4p ) , int( all_cells [ i ]->ID == ID_CD4pi ) ) );
-			}
-			throwAllModels2Out( ( "cells_pos_view" + WARTS + ".obj" ).c_str( ) );
-			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -noslice -o screen" + WARTS + ".bmp -md 100.0 -rx 0.0 -ry " + "90.0" + " -rz 0.0" ).c_str( ) );
-		}
-		//getchar( );
 	}
 	system( "del video.mp4" );
 	system( "ffmpeg.exe -r 10/1 -i screen_%07d.bmp -c:v libx264 -vf \"fps = 50 , format = yuv420p\" video.mp4" );
