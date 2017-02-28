@@ -139,13 +139,13 @@ const static long FLUID_ZONE_N = 3;
 #define GROWTH_FACTOR 0
 #define INFLAMMATORY_FACTOR 1
 #define VIRUS_FACTOR 2
-const static double ft = 72 * 60;//10 * 60; // 10 hours
+const static double ft = 240 * 60;//10 * 60; // 10 days
 const static double dt = 0.1; // discretization 0.05*0.05 / 10. = 0.00025
 const static double MAX_CELL_DIAMETER = 6.;
 const static double VEC_MOD = 0.75; // доля старого вектора, оставляемая на итерации
 const static double R_MOD = 0.1; // доля вектора, определяемая случайным значением
 const static double INFECT_CHANCE = 0.005;
-const static double KILL_CHANCE = 0.1;
+const static double KILL_CHANCE = 1.;
 const static double WALL__TOUCH_FORCE_COEFFICIENT = 0.6 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
 const static double CELL__TOUCH_FORCE_COEFFICIENT = 0.2 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
 const static double FLUID_TOUCH_FORCE_COEFFICIENT = 0.3 * ( 1. - VEC_MOD - R_MOD * ( 1. - VEC_MOD ) );
@@ -230,7 +230,10 @@ public:
 };
 class CD8p : public CELL {
 public:
+	double KILL_TIMER , KILL_TIMER_CONST;
 	CD8p( PointF P = PointF( ) ) {
+		KILL_TIMER = 0.;
+		KILL_TIMER_CONST = 5.; // 5 minutes
 		VEC = PointF( );
 		POS = P;
 		MITOS = 0;
@@ -245,6 +248,9 @@ public:
 	}
 	bool can_move( ) {
 		return MITOS == 0;
+	}
+	bool can_kill( ) {
+		return KILL_TIMER == 0;
 	}
 };
 class FLUID_ZONE {
@@ -1018,7 +1024,10 @@ void cells_dynamic( ) {
 							ЗДЕСЬ ДОБАВЬТЕ ВСЯКУЮ ФИГНЮ ТИПА УБИЙСТВА КЛЕТОК И Т.П.
 						*/
 						if ( cell->ID == ID_CD8p && cell2->ID == ID_CD4pi && rnd( true ) < KILL_CHANCE ) {
-							cell2->LIFE = -1;
+							if ( ( ( CD8p* ) ( cell ) )->can_kill( ) ) {
+								cell2->LIFE = -1;
+								( ( CD8p* ) ( cell ) )->KILL_TIMER = ( ( CD8p* ) ( cell ) )->KILL_TIMER_CONST;
+							}
 						}
 					}
 				}
@@ -1250,20 +1259,20 @@ int main( int argc , char** argv ) {
 	}
 	{
 		// внесение клеток в модель
-		for ( int i = 0; i < 10; i++ ) {
+		for ( int i = 0; i < 20; i++ ) {
 			// infected cd4+
 			placeCellInRandomPlace( CD4p( ) );
 			all_cells [ all_cells.size( ) - 1 ]->ID = ID_CD4pi;
 			all_cells [ all_cells.size( ) - 1 ]->LIFE *= rnd( true );
 			all_cells [ all_cells.size( ) - 1 ]->DIV_INTERVAL = 12 * 60; // just infected
 		}
-		for ( int i = 0; i < 100; i++ ) {
+		for ( int i = 0; i < 660; i++ ) {
 			// health cd4+
 			placeCellInRandomPlace( CD4p( ) );
 			all_cells [ all_cells.size( ) - 1 ]->LIFE *= rnd( true );
 			all_cells [ all_cells.size( ) - 1 ]->DIV_INTERVAL *= rnd( true );
 		}
-		for ( int i = 0; i < 1; i++ ) {
+		for ( int i = 0; i < 20; i++ ) {
 			// effectors cd8+
 			placeCellInRandomPlace( CD8p( ) );
 			all_cells [ all_cells.size( ) - 1 ]->LIFE *= rnd( true );
@@ -1271,10 +1280,32 @@ int main( int argc , char** argv ) {
 		}
 		/* Разработка агентной модели миграции и взаимодействия клеточных популяций и ВИЧ в замкнутой области лимфатического узла */
 	}
+	{
+		// анализ объёмов
+		double FRCCOUNT = 0 , NCOUNT = 0 , BCOUNT = 0;
+		for ( long i = 0; i < MAPSIZE.x; i++ ) {
+			for ( long j = 0; j < MAPSIZE.y; j++ ) {
+				for ( long k = 0; k < MAPSIZE.z; k++ ) {
+					if ( check( i , j , k ) ) {
+						FRCCOUNT += int( getFLink( i , j , k )->type == FRC );
+						NCOUNT += int( getFLink( i , j , k )->type == NORMAL );
+						BCOUNT += int( getFLink( i , j , k )->type == BOUND );
+					}
+				}
+			}
+		}
+		cout << "Full volume: " << FRCCOUNT + NCOUNT + BCOUNT << " mkm^3" << endl;
+		cout << "Bound takes: " << BCOUNT << " mkm^3 (" << int( 10000. * BCOUNT / ( FRCCOUNT + NCOUNT + BCOUNT ) ) / 100. << "%)" << endl;
+		cout << "FRC takes: " << FRCCOUNT << " mkm^3 (" << int( 10000. * FRCCOUNT / ( FRCCOUNT + NCOUNT + BCOUNT ) ) / 100. << "%)" << endl;
+		cout << "Normal takes: " << NCOUNT << " mkm^3 (" << int( 10000. * NCOUNT / ( FRCCOUNT + NCOUNT + BCOUNT ) ) / 100. << "%)" << endl;
+		getchar( );
+		//return 0;
+	}
 	gtc_start( );
 	double timeInfo = omp_get_wtime( ) , fullTime = 0;
 	system( "del cells_pos_view*.obj" );
 	system( "del screen*.bmp" );
+	system( "del gscript.sc" );
 	for ( long SRETI = 0; SRETI < ITERS; SRETI++ ) {
 		{
 			// установление граничных условий
@@ -1302,7 +1333,7 @@ int main( int argc , char** argv ) {
 		cells_dynamic( );
 		//******************************************************************************
 		bool REPORTS = !true;
-		long EACHSRETI = 100; /*POIU link*/
+		long EACHSRETI = 600; /*POIU link*/
 		if ( REPORTS && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % EACHSRETI ) == 0 ) ) ) {
 			double DX = -MAPSIZE.x / 2.;
 			double DY = -MAPSIZE.y / 2.;
@@ -1349,12 +1380,13 @@ int main( int argc , char** argv ) {
 			}
 			throwAllModels2Out( ( "cells_pos_view" + WARTS + ".obj" ).c_str( ) );
 			char WARTS_S [ 4096 ];
-			sprintf( WARTS_S , "%lf" , SRETI * dt );
-			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -noslice -o screen" + WARTS + ".bmp -md 100.0 -rx 0.0 -ry " + string( WARTS_S )/*"90.0"*/ + " -rz 0.0" ).c_str( ) );
+			sprintf( WARTS_S , "%lf" , 0 * SRETI * dt );
+			system( ( "OPOvis.exe -i cells_pos_view" + WARTS + ".obj -iq FRCnvi.obj -slice -o screen" + WARTS + ".bmp -md 100.0 -rx 0.0 -ry " + string( WARTS_S )/*"90.0"*/ + " -rz 0.0" ).c_str( ) );
 			system( "del cells_pos_view*.obj" );
 		}
+		long SHORT_EACHSRETI = 10; /*POIU link2*/
 		bool REPORTS_SHORT = true;
-		if ( REPORTS_SHORT && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % EACHSRETI ) == 0 ) ) ) {
+		if ( REPORTS_SHORT && ( ( SRETI == 0 ) || ( ( ( SRETI + 1 ) % SHORT_EACHSRETI ) == 0 ) ) ) {
 			if ( SRETI == 0 ) {
 				system( "del short_reports.txt" );
 			}
